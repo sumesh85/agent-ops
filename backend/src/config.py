@@ -1,0 +1,81 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Anthropic
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+
+    # PostgreSQL
+    postgres_host: str = "db"
+    postgres_port: int = 5432
+    postgres_db: str = "agentops"
+    postgres_user: str = "agentops"
+    postgres_password: str = "agentops_dev_secret"
+
+    # Redis
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_ttl_tool_call: int = 60
+    redis_ttl_policy: int = 300
+    redis_ttl_cases: int = 120
+
+    # ChromaDB
+    chroma_host: str = "chroma"
+    chroma_port: int = 8000
+    chroma_collection_policies: str = "policies"
+    chroma_collection_cases: str = "case_embeddings"
+
+    # Service URLs
+    agent_url: str = "http://agent:8010"
+
+    # App
+    app_env: str = "development"
+    log_level: str = "INFO"
+
+    @property
+    def database_dsn(self) -> str:
+        """Plain postgresql:// DSN for asyncpg (no +asyncpg driver prefix)."""
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def database_url_sync(self) -> str:
+        """psycopg2 URL for Alembic migrations."""
+        return (
+            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}"
+
+    @property
+    def chroma_url(self) -> str:
+        return f"http://{self.chroma_host}:{self.chroma_port}"
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env == "development"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

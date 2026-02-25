@@ -1,0 +1,37 @@
+[project]
+name = "agent-ops-agent"
+version = "0.1.0"
+description = "AgentOps Investigation Agent — Claude + MCP client"
+requires-python = ">=3.12"
+
+dependencies = [
+    # API
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+
+    # MCP client
+    "mcp[cli]>=1.2.0",
+
+    # AI
+    "anthropic>=0.40.0",
+
+    # Config + validation
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+
+    # Logging
+    "structlog>=24.4.0",
+]
+
+[tool.ruff]
+line-length    = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version         = "3.12"
+strict                 = true
+ignore_missing_imports = true

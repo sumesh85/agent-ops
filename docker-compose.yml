@@ -1,0 +1,165 @@
+services:
+
+  # ── Relational store ────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Cache / session store ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Vector store ────────────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:latest
+    restart: unless-stopped
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ""
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── MCP tool server ─────────────────────────────────────────────────────────
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./mcp-server/src:/app/src:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost',8002)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Investigation agent ─────────────────────────────────────────────────────
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./agent/src:/app/src:ro
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8010/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API (control plane) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/scripts:/app/scripts:ro
+      - ./docs/policies:/app/policies:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Frontend UI ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── One-shot seed runner (make seed) ───────────────────────────────────────
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    env_file: .env
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/scripts:/app/scripts:ro
+      - ./docs/policies:/app/policies:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    command: python scripts/seed_all.py
+    profiles: ["seed"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:

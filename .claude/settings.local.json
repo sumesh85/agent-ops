@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(which npm:*)",
+      "Bash(cd /Users/punakkals/work/agent-ops/frontend && npm install --package-lock-only 2>&1)",
+      "Bash(docker compose:*)",
+      "Bash(docker compose stop chroma && docker compose rm -f chroma && docker volume rm agent-ops_chroma_data 2>&1)",
+      "Bash(sleep 10 && curl -s http://localhost:8001/api/v1/heartbeat 2>&1)",
+      "Bash(curl:*)",
+      "Bash(claude mcp:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(# Check the existing run trace for issue-unauth-trade-0003\ncurl -s http://localhost:8000/api/v1/runs/7fd8a56b-cb1a-427f-88ea-03af2332d1d0 | python3 -m json.tool 2>&1)"
+    ]
+  }
+}
