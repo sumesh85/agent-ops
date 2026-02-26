@@ -1,5 +1,5 @@
 [project]
-name = "agentops-mcp-server"
+name = "casepilot-mcp-server"
 version = "0.1.0"
 description = "MCP tool server — exposes investigation tools over SSE"
 requires-python = ">=3.12"

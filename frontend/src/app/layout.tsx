@@ -3,7 +3,7 @@ import "./globals.css";
 import SidebarNav from "@/components/SidebarNav";
 
 export const metadata: Metadata = {
-  title: "AgentOps Control Plane",
+  title: "Casepilot",
   description: "AI reliability infrastructure for agentic workflows",
 };
 
@@ -22,8 +22,8 @@ function Sidebar() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-100 leading-none">AgentOps</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Control Plane</p>
+            <p className="text-sm font-semibold text-slate-100 leading-none">Casepilot</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Investigation Platform</p>
           </div>
         </div>
       </div>

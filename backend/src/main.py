@@ -1,4 +1,4 @@
-"""AgentOps Control Plane — backend API."""
+"""Casepilot — backend API."""
 
 import json
 from datetime import datetime
@@ -17,8 +17,8 @@ from src.replay import compute_stability, generate_perturbations
 log = structlog.get_logger()
 
 app = FastAPI(
-    title="AgentOps Control Plane",
-    description="Observability and governance layer for agentic AI workflows",
+    title="Casepilot",
+    description="AI-powered financial issue investigation platform",
     version="0.1.0",
     docs_url="/docs" if settings.is_development else None,
 )
@@ -634,10 +634,10 @@ async def _persist_trace(result: dict, is_replay: bool = False) -> None:  # type
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    log.info("agentops.startup", env=settings.app_env, agent_url=settings.agent_url)
+    log.info("casepilot.startup", env=settings.app_env, agent_url=settings.agent_url)
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     await close_pool()
-    log.info("agentops.shutdown")
+    log.info("casepilot.shutdown")

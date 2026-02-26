@@ -1,4 +1,4 @@
-# ── AgentOps Control Plane ─────────────────────────────────────────────────────
+# ── Casepilot ──────────────────────────────────────────────────────────────────
 # make help   → list all targets
 # make dev    → full local stack (build → up → seed)
 

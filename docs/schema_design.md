@@ -1,5 +1,5 @@
 # Data Schema Design
-# Financial Issue Investigation Agent — AgentOps MVP
+# Financial Issue Investigation Agent — Casepilot
 
 ---
 

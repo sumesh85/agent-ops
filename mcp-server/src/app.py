@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from src.config import settings
 
 mcp = FastMCP(
-    name="agentops-investigation-tools",
+    name="casepilot-investigation-tools",
     instructions=(
         "Tools for investigating Wealthsimple customer issues. "
         "Provides access to customer accounts, transactions, login history, "

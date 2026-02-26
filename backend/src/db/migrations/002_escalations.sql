@@ -1,4 +1,4 @@
--- AgentOps: escalation review queue
+-- Casepilot: escalation review queue
 -- Applied automatically by the backend on startup (idempotent)
 
 CREATE TABLE IF NOT EXISTS escalation_reviews (

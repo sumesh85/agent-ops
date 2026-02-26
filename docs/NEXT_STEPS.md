@@ -1,4 +1,4 @@
-# Next Steps — AgentOps Roadmap
+# Next Steps — Casepilot Roadmap
 
 Current state: **MVP + Human-in-the-Loop Escalation + Business Metrics Dashboard** ✅
 

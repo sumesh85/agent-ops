@@ -1,7 +1,7 @@
 [project]
-name = "agent-ops-agent"
+name = "casepilot-agent"
 version = "0.1.0"
-description = "AgentOps Investigation Agent — Claude + MCP client"
+description = "Casepilot Investigation Agent — Claude + MCP client"
 requires-python = ">=3.12"
 
 dependencies = [

@@ -1,4 +1,4 @@
--- AgentOps: initial schema
+-- Casepilot: initial schema
 -- Applied automatically by PostgreSQL on first container start
 
 -- ── Customers ─────────────────────────────────────────────────────────────────

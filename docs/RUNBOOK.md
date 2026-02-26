@@ -1,4 +1,4 @@
-# AgentOps Control Plane — Runbook
+# Casepilot — Runbook
 
 Step-by-step instructions to start, seed, and test the full stack locally.
 

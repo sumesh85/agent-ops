@@ -1,4 +1,4 @@
--- AgentOps: replay engine schema
+-- Casepilot: replay engine schema
 -- Applied via: make migrate
 
 CREATE TABLE IF NOT EXISTS replay_sessions (

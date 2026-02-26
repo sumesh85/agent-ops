@@ -1,4 +1,4 @@
--- AgentOps: distinguish replay-generated traces from primary investigations
+-- Casepilot: distinguish replay-generated traces from primary investigations
 -- Applied via: make migrate
 
 ALTER TABLE run_traces ADD COLUMN IF NOT EXISTS is_replay BOOLEAN NOT NULL DEFAULT false;

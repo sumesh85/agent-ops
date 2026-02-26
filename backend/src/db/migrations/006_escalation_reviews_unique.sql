@@ -1,4 +1,4 @@
--- AgentOps: add missing UNIQUE constraint on escalation_reviews.trace_id
+-- Casepilot: add missing UNIQUE constraint on escalation_reviews.trace_id
 -- The table was created before migrations moved out of app startup,
 -- so CREATE TABLE IF NOT EXISTS skipped the constraint.
 -- Applied via: make migrate

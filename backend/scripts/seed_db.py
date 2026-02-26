@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-seed_db.py — Synthetic data generator for AgentOps demo.
+seed_db.py — Synthetic data generator for Casepilot demo.
 
 Idempotent: truncates all tables and rebuilds on every run.
 Generates deterministic demo-scenario rows + randomised background data.

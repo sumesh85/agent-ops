@@ -11,7 +11,7 @@ from src.runner import run_investigation
 log = structlog.get_logger()
 
 app = FastAPI(
-    title="AgentOps Investigation Agent",
+    title="Casepilot Investigation Agent",
     description="Claude + MCP investigation runner",
     version="0.1.0",
     docs_url="/docs" if settings.is_development else None,

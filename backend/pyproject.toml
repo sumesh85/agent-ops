@@ -1,7 +1,7 @@
 [project]
-name = "agent-ops-backend"
+name = "casepilot-backend"
 version = "0.1.0"
-description = "AgentOps Control Plane — backend API and agent runner"
+description = "Casepilot — backend API and agent runner"
 requires-python = ">=3.12"
 
 dependencies = [

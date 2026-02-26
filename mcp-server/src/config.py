@@ -8,9 +8,9 @@ class Settings(BaseSettings):
     # PostgreSQL (read-only access)
     postgres_host:     str = "db"
     postgres_port:     int = 5432
-    postgres_db:       str = "agentops"
-    postgres_user:     str = "agentops"
-    postgres_password: str = "agentops_dev_secret"
+    postgres_db:       str = "casepilot"
+    postgres_user:     str = "casepilot"
+    postgres_password: str = "casepilot_dev_secret"
 
     # Redis
     redis_host:          str = "redis"
