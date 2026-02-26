@@ -2,11 +2,13 @@
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import structlog
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from src.config import settings
 from src.db.pool import close_pool, get_pool
@@ -140,6 +142,173 @@ async def get_run(trace_id: str) -> dict:  # type: ignore[type-arg]
     return result
 
 
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/v1/analytics/summary", tags=["analytics"])
+async def analytics_summary() -> dict:  # type: ignore[type-arg]
+    """Aggregated metrics across all completed run traces."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Overall summary
+        summary = await conn.fetchrow(
+            """
+            SELECT
+                COUNT(*)                                                    AS total_runs,
+                COUNT(*) FILTER (WHERE escalate = FALSE AND status = 'completed') AS auto_resolved,
+                COUNT(*) FILTER (WHERE escalate = TRUE)                     AS escalated,
+                COUNT(*) FILTER (WHERE status = 'failed')                   AS failed,
+                ROUND(AVG(confidence_score)::numeric, 3)                    AS avg_confidence,
+                ROUND(AVG(
+                    EXTRACT(EPOCH FROM (completed_at - started_at)) / 60.0
+                )::numeric, 2)                                              AS avg_duration_minutes,
+                SUM(token_count)                                            AS total_tokens
+            FROM run_traces
+            WHERE status != 'running'
+            """
+        )
+
+        # Per-issue breakdown
+        by_issue_rows = await conn.fetch(
+            """
+            SELECT issue_id, confidence_score, escalate, status
+            FROM run_traces
+            WHERE status != 'running'
+            ORDER BY started_at DESC
+            """
+        )
+
+        # Policy flag frequency (unnest JSONB array)
+        flag_rows = await conn.fetch(
+            """
+            SELECT flag, COUNT(*) AS cnt
+            FROM run_traces,
+                 jsonb_array_elements_text(
+                     CASE WHEN jsonb_typeof(policy_flags) = 'array'
+                          THEN policy_flags ELSE '[]'::jsonb END
+                 ) AS flag
+            WHERE status != 'running'
+              AND flag != ''
+            GROUP BY flag
+            ORDER BY cnt DESC
+            LIMIT 10
+            """
+        )
+
+    return {
+        "summary": dict(summary) if summary else {},
+        "by_issue": [dict(r) for r in by_issue_rows],
+        "policy_flag_frequency": [{"flag": r["flag"], "count": r["cnt"]} for r in flag_rows],
+    }
+
+
+# ── Escalation queue ──────────────────────────────────────────────────────────
+
+@app.get("/api/v1/escalations", tags=["escalations"])
+async def list_escalations() -> dict:  # type: ignore[type-arg]
+    """List all escalated runs with issue context and any existing review."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                t.trace_id, t.issue_id, t.status AS run_status,
+                t.confidence_score, t.escalate, t.policy_flags,
+                t.agent_reasoning, t.structured_output,
+                t.started_at::text, t.completed_at::text,
+                i.urgency, i.channel, i.raw_message,
+                LEFT(i.raw_message, 160) AS message_preview,
+                c.name AS customer_name, c.customer_id,
+                r.review_id, r.decision, r.notes,
+                r.reviewer, r.reviewed_at::text
+            FROM run_traces t
+            JOIN issues i     ON i.issue_id = t.issue_id
+            JOIN customers c  ON c.customer_id = i.customer_id
+            LEFT JOIN escalation_reviews r ON r.trace_id = t.trace_id
+            WHERE t.escalate = TRUE
+            ORDER BY
+                CASE i.urgency WHEN 'critical' THEN 1 WHEN 'high' THEN 2
+                               WHEN 'medium' THEN 3 ELSE 4 END,
+                t.started_at DESC
+            """
+        )
+    escalations = []
+    for r in rows:
+        row = dict(r)
+        for field in ("policy_flags", "structured_output"):
+            if isinstance(row.get(field), str):
+                row[field] = json.loads(row[field])
+        escalations.append(row)
+    return {"escalations": escalations, "count": len(escalations)}
+
+
+class ReviewRequest(BaseModel):
+    decision: str   # approved | overridden | rejected
+    notes: str = ""
+    reviewer: str = "human_agent"
+
+
+@app.post("/api/v1/escalations/{trace_id}/review", tags=["escalations"])
+async def review_escalation(trace_id: str, body: ReviewRequest) -> dict:  # type: ignore[type-arg]
+    """
+    Submit a human review decision for an escalated run.
+
+    - approved:   human agrees with escalation, will handle manually
+    - overridden: human overrides — issue can be auto-resolved after all
+    - rejected:   agent was wrong, re-investigate (future: trigger replay)
+    """
+    if body.decision not in ("approved", "overridden", "rejected"):
+        raise HTTPException(
+            status_code=422,
+            detail="decision must be one of: approved, overridden, rejected",
+        )
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        trace = await conn.fetchrow(
+            "SELECT trace_id, issue_id, escalate FROM run_traces WHERE trace_id = $1",
+            trace_id,
+        )
+        if not trace:
+            raise HTTPException(status_code=404, detail=f"Trace '{trace_id}' not found.")
+        if not trace["escalate"]:
+            raise HTTPException(status_code=422, detail="This run was not escalated.")
+
+        # Upsert — one review per trace
+        review_id = await conn.fetchval(
+            """
+            INSERT INTO escalation_reviews (trace_id, issue_id, reviewer, decision, notes)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (trace_id) DO UPDATE
+                SET decision    = EXCLUDED.decision,
+                    notes       = EXCLUDED.notes,
+                    reviewer    = EXCLUDED.reviewer,
+                    reviewed_at = NOW()
+            RETURNING review_id
+            """,
+            trace_id,
+            trace["issue_id"],
+            body.reviewer,
+            body.decision,
+            body.notes,
+        )
+
+        new_status = (
+            "resolved"  if body.decision == "overridden" else
+            "open"      if body.decision == "rejected"   else
+            "escalated"
+        )
+        await conn.execute(
+            "UPDATE issues SET status = $1 WHERE issue_id = $2",
+            new_status, trace["issue_id"],
+        )
+
+    log.info(
+        "backend.escalation_reviewed",
+        trace_id=trace_id, decision=body.decision, reviewer=body.reviewer,
+    )
+    return {"review_id": review_id, "trace_id": trace_id, "decision": body.decision}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _persist_trace(result: dict) -> None:  # type: ignore[type-arg]
@@ -179,6 +348,12 @@ async def _persist_trace(result: dict) -> None:  # type: ignore[type-arg]
 
 @app.on_event("startup")
 async def on_startup() -> None:
+    # Apply pending migrations (idempotent DDL)
+    pool = await get_pool()
+    migration = Path(__file__).parent / "db" / "migrations" / "002_escalations.sql"
+    if migration.exists():
+        async with pool.acquire() as conn:
+            await conn.execute(migration.read_text())
     log.info("agentops.startup", env=settings.app_env, agent_url=settings.agent_url)
 
 

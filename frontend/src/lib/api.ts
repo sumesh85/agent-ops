@@ -79,12 +79,95 @@ export async function triggerInvestigation(issueId: string): Promise<RunTrace> {
   return res.json();
 }
 
+export async function getAnalytics(): Promise<AnalyticsData> {
+  const res = await fetch(`${API_URL}/api/v1/analytics/summary`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load analytics: ${res.status}`);
+  return res.json();
+}
+
+export async function listEscalations(): Promise<EscalationRun[]> {
+  const res = await fetch(`${API_URL}/api/v1/escalations`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load escalations: ${res.status}`);
+  const data = await res.json();
+  return data.escalations;
+}
+
+export async function submitReview(
+  traceId: string,
+  decision: "approved" | "overridden" | "rejected",
+  notes: string,
+): Promise<{ review_id: string; decision: string }> {
+  const res = await fetch(`${API_URL}/api/v1/escalations/${traceId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision, notes }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Review failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function getRun(traceId: string): Promise<RunTrace> {
   const res = await fetch(`${API_URL}/api/v1/runs/${traceId}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to load run: ${res.status}`);
   return res.json();
+}
+
+export interface AnalyticsSummary {
+  total_runs: number;
+  auto_resolved: number;
+  escalated: number;
+  failed: number;
+  avg_confidence: number | null;
+  avg_duration_minutes: number | null;
+  total_tokens: number | null;
+}
+
+export interface IssueMetric {
+  issue_id: string;
+  confidence_score: number | null;
+  escalate: boolean;
+  status: string;
+}
+
+export interface FlagCount {
+  flag: string;
+  count: number;
+}
+
+export interface AnalyticsData {
+  summary: AnalyticsSummary;
+  by_issue: IssueMetric[];
+  policy_flag_frequency: FlagCount[];
+}
+
+export interface EscalationRun {
+  trace_id: string;
+  issue_id: string;
+  run_status: string;
+  confidence_score: number;
+  escalate: boolean;
+  policy_flags: string[];
+  agent_reasoning: string;
+  structured_output: StructuredOutput;
+  started_at: string;
+  completed_at: string;
+  urgency: "low" | "medium" | "high" | "critical";
+  channel: string;
+  raw_message: string;
+  message_preview: string;
+  customer_name: string;
+  customer_id: string;
+  // review (null if not yet reviewed)
+  review_id: string | null;
+  decision: "approved" | "overridden" | "rejected" | null;
+  notes: string | null;
+  reviewer: string | null;
+  reviewed_at: string | null;
 }
 
 // ── Scenario labels ────────────────────────────────────────────────────────────

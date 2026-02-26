@@ -38,10 +38,11 @@ function NavItem({
 export default function SidebarNav() {
   return (
     <nav className="flex-1 p-3 space-y-0.5">
-      <NavItem href="/overview" icon="📈" label="Overview" />
-      <NavItem href="/issues"   icon="📋" label="Issues" />
-      <NavItem href="#"         icon="🔁" label="Replay"    disabled />
-      <NavItem href="#"         icon="📊" label="Stability" disabled />
+      <NavItem href="/overview"    icon="📈" label="Overview" />
+      <NavItem href="/issues"      icon="📋" label="Issues" />
+      <NavItem href="/escalations" icon="🚨" label="Escalations" />
+      <NavItem href="/analytics"   icon="📊" label="Analytics" />
+      <NavItem href="#"            icon="🔁" label="Replay"    disabled />
     </nav>
   );
 }

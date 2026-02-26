@@ -92,7 +92,7 @@ frontend (Next.js 15, :3000)
 | `mcp-server/src/server.py` | Entrypoint — imports tool modules (triggers `@mcp.tool()` registration), runs SSE server |
 | `mcp-server/src/app.py` | Singleton `FastMCP` instance — imported by all tool modules |
 | `mcp-server/src/tools/` | 3 files: `accounts.py` (4 tools), `transactions.py` (2 tools), `knowledge.py` (2 tools) |
-| `backend/src/main.py` | FastAPI endpoints: `POST /investigate/{id}`, `GET /issues`, `GET /runs/{trace_id}` |
+| `backend/src/main.py` | FastAPI endpoints: `POST /investigate/{id}`, `GET /issues`, `GET /runs/{trace_id}`, `GET /escalations`, `POST /escalations/{trace_id}/review` |
 | `backend/src/db/migrations/001_init.sql` | Full PostgreSQL schema — applied automatically on first container start |
 | `backend/scripts/seed_db.py` | Synthetic data generator — creates all 6 demo scenario entities with fixed IDs |
 | `backend/scripts/seed_vector.py` | Chunks 8 policy markdown files → ChromaDB; embeds 80 historical cases |
@@ -127,7 +127,9 @@ This terminal tool is **defined only in `agent/src/runner.py`** and never expose
 
 ## Database schema summary
 
-8 PostgreSQL tables: `customers`, `accounts`, `transactions`, `login_events`, `communications`, `cases`, `issues`, `run_traces`.
+9 PostgreSQL tables: `customers`, `accounts`, `transactions`, `login_events`, `communications`, `cases`, `issues`, `run_traces`, `escalation_reviews`.
+
+`escalation_reviews` is created by `002_escalations.sql` applied automatically on backend startup (not via `docker-entrypoint-initdb.d`). Fields: `review_id`, `trace_id` (UNIQUE FK), `issue_id`, `reviewer`, `decision` (approved|overridden|rejected), `notes`, `reviewed_at`.
 
 - `transactions.status`: `completed | pending | processing | failed | reversed | pending_reversal`
 - `transactions.transaction_type`: `deposit | withdrawal | wire_in | wire_out | transfer_in | transfer_out | trade_buy | trade_sell | dividend | drip | etransfer`
@@ -172,6 +174,8 @@ Cache key format: `tool:{tool_name}:{sha256_of_kwargs[:16]}`. The agent uses lat
 | `/` | Redirects to `/overview` |
 | `/overview` | Stability Overview — confidence bars, demo script, avg confidence ring |
 | `/issues` | Issues Dashboard — trigger investigations, see post-run confidence |
+| `/escalations` | Escalation Queue — human review (approve / override / reject) for escalated runs |
+| `/analytics` | Business Metrics — resolution rate, confidence, duration, token cost, policy flag frequency |
 | `/runs/[traceId]` | Run Detail — tool trace timeline, policy flags, reasoning accordion, evidence details |
 
 The `StructuredOutput` type has `[key: string]: unknown` to allow scenario-specific extra fields (`evidence_summary`, `security_signals`, `breakdown`, `transaction_summary`) to render automatically in the "Evidence Details" section.
