@@ -45,7 +45,8 @@ restart-agent: ## Restart agent only
 # ── Data ─────────────────────────────────────────────────────────────────────────
 .PHONY: migrate
 migrate: ## Apply SQL migrations in order (idempotent — safe to re-run)
-	@for f in backend/src/db/migrations/*.sql; do \
+	@set -a; . ./.env; set +a; \
+	for f in backend/src/db/migrations/*.sql; do \
 		echo "Applying $$f..."; \
 		$(COMPOSE) exec -T db psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f - < $$f; \
 	done

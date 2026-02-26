@@ -169,21 +169,35 @@ function ConfidenceByScenario({ issues }: { issues: IssueMetric[] }) {
   if (issues.length === 0) {
     return <p className="text-xs text-slate-600 py-4">No runs yet.</p>;
   }
+  const seen = new Set<string>();
+  const unique = issues.filter(({ issue_id }) => !seen.has(issue_id) && !!seen.add(issue_id));
   const max = 1.0;
   return (
     <div className="space-y-3">
-      {issues.map((issue) => {
+      {unique.map((issue) => {
         const score = issue.confidence_score ?? 0;
         const color = score >= 0.8 ? "#34d399" : score >= 0.6 ? "#fbbf24" : "#f87171";
         const label = SCENARIO_LABELS[issue.issue_id] ?? issue.issue_id;
         return (
-          <HBar
-            key={issue.issue_id}
-            label={label}
-            value={score}
-            max={max}
-            color={color}
-          />
+          <div key={issue.issue_id} className="flex items-center gap-2">
+            <div className="flex-1">
+              <HBar label={label} value={score} max={max} color={color} />
+            </div>
+            {issue.critic_agrees !== null && issue.critic_agrees !== undefined ? (
+              <div
+                title={issue.critic_agrees ? "Critic agrees" : "Critic flagged a concern"}
+                className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center
+                            text-xs font-bold border
+                            ${issue.critic_agrees
+                              ? "bg-emerald-900/60 border-emerald-700/50 text-emerald-400"
+                              : "bg-rose-900/60 border-rose-700/50 text-rose-400"}`}
+              >
+                {issue.critic_agrees ? "✓" : "✗"}
+              </div>
+            ) : (
+              <div className="shrink-0 w-5 h-5" />
+            )}
+          </div>
         );
       })}
     </div>
@@ -239,6 +253,11 @@ export default function AnalyticsPage() {
       ? ((s.total_tokens / 1_000_000) * 5).toFixed(4)
       : null;
 
+  const criticPct =
+    s && s.critic_reviewed > 0
+      ? Math.round((s.critic_agreed / s.critic_reviewed) * 100)
+      : null;
+
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
 
@@ -259,13 +278,13 @@ export default function AnalyticsPage() {
 
       {/* Stat cards */}
       {loading ? (
-        <div className="grid grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
             <div key={i} className="h-20 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : s ? (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           <StatCard
             label="Total Runs"
             value={s.total_runs}
@@ -285,6 +304,18 @@ export default function AnalyticsPage() {
               s.avg_confidence != null
                 ? s.avg_confidence >= 0.8 ? "green"
                 : s.avg_confidence >= 0.6 ? "amber"
+                : "rose"
+                : undefined
+            }
+          />
+          <StatCard
+            label="Critic Agreement"
+            value={criticPct !== null ? `${criticPct}%` : "—"}
+            sub={s.critic_reviewed > 0 ? `${s.critic_agreed}/${s.critic_reviewed} reviewed` : "no reviews yet"}
+            accent={
+              criticPct !== null
+                ? criticPct >= 80 ? "green"
+                : criticPct >= 60 ? "amber"
                 : "rose"
                 : undefined
             }

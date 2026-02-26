@@ -41,8 +41,8 @@ export default function SidebarNav() {
       <NavItem href="/overview"    icon="📈" label="Overview" />
       <NavItem href="/issues"      icon="📋" label="Issues" />
       <NavItem href="/escalations" icon="🚨" label="Escalations" />
-      <NavItem href="/analytics"   icon="📊" label="Analytics" />
-      <NavItem href="#"            icon="🔁" label="Replay"    disabled />
+      <NavItem href="/analytics"  icon="📊" label="Analytics" />
+      <NavItem href="/stability"  icon="🔁" label="Stability" />
     </nav>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getRun, SCENARIO_LABELS, type RunTrace } from "@/lib/api";
+import { getRun, triggerReplay, getReplaySession, SCENARIO_LABELS, type RunTrace, type ReplaySession } from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
 import ConfidenceRing from "@/components/ConfidenceRing";
 import PolicyFlags from "@/components/PolicyFlags";
-import ToolTrace from "@/components/ToolTrace";
+import WorkflowDiagram from "@/components/WorkflowDiagram";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -210,6 +210,222 @@ function ResolutionCard({ run }: { run: RunTrace }) {
   );
 }
 
+// ── Critic review ─────────────────────────────────────────────────────────────
+
+function CriticPanel({ run }: { run: RunTrace }) {
+  if (run.critic_agrees === null || run.critic_agrees === undefined) {
+    return (
+      <p className="text-xs text-slate-500 italic">
+        No critic review yet — trigger an investigation to see the Haiku audit.
+      </p>
+    );
+  }
+
+  const agrees = run.critic_agrees;
+  const border = agrees ? "border-emerald-700/40 bg-emerald-950/10" : "border-rose-700/40 bg-rose-950/10";
+  const iconColor = agrees ? "text-emerald-400" : "text-rose-400";
+  const icon = agrees ? "✓" : "✗";
+  const label = agrees ? "Agrees with verdict" : "Flags a concern";
+
+  return (
+    <div className={`rounded-xl border ${border} overflow-hidden`}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0
+                         border ${agrees ? "border-emerald-600/60" : "border-rose-600/60"}`}>
+          <span className={`text-xs font-bold ${iconColor}`}>{icon}</span>
+        </div>
+        <div className="flex-1">
+          <p className={`text-xs font-semibold ${iconColor}`}>{label}</p>
+          {run.critic_model && (
+            <p className="text-xs text-slate-600 font-mono mt-0.5">{run.critic_model}</p>
+          )}
+        </div>
+      </div>
+      {run.critic_notes && (
+        <div className="px-4 pb-3 border-t border-slate-700/30 pt-3">
+          <p className="text-xs text-slate-400 leading-relaxed">{run.critic_notes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Replay panel ──────────────────────────────────────────────────────────────
+
+function StabilityBar({ score, matches, n }: { score: number; matches: number; n: number }) {
+  const color = score >= 0.8 ? "#34d399" : score >= 0.6 ? "#fbbf24" : "#f87171";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-slate-400">Stability score</span>
+        <span className="font-mono font-bold" style={{ color }}>
+          {Math.round(score * 100)}% ({matches}/{n} matched)
+        </span>
+      </div>
+      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          className="h-2 rounded-full transition-all duration-700"
+          style={{ width: `${score * 100}%`, background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReplayPanel({ traceId }: { traceId: string }) {
+  const [session, setSession]   = useState<ReplaySession | null>(null);
+  const [running, setRunning]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const handleReplay = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      // Returns immediately — session is in 'running' state
+      const initial = await triggerReplay(traceId, 3);
+
+      // Poll until complete (max ~5 min, every 5s)
+      let current = initial;
+      for (let i = 0; i < 60 && current.status === "running"; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        if (!mountedRef.current) return;
+        current = await getReplaySession(current.session_id);
+      }
+
+      if (mountedRef.current) setSession(current);
+    } catch (e) {
+      if (mountedRef.current) setError(String(e));
+    } finally {
+      if (mountedRef.current) setRunning(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {!session && !running && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500 leading-relaxed max-w-md">
+            Re-run this investigation with 3 paraphrased variants of the customer message.
+            Measures whether the agent reaches the same verdict under different wording.
+          </p>
+          <button
+            onClick={handleReplay}
+            className="shrink-0 text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white
+                       font-medium hover:bg-indigo-500 transition-colors"
+          >
+            Run Replay (3×)
+          </button>
+        </div>
+      )}
+
+      {running && (
+        <div className="flex items-center gap-3 p-4 bg-slate-800/40 rounded-lg">
+          <svg className="animate-spin w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+          </svg>
+          <div>
+            <p className="text-xs font-medium text-slate-200">Running 3 replay variations…</p>
+            <p className="text-xs text-slate-500 mt-0.5">Polling for results every 5s — safe to wait here.</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="p-3 bg-rose-900/30 border border-rose-800 rounded-lg text-xs text-rose-300">
+          {error}
+        </div>
+      )}
+
+      {session && (
+        <div className="space-y-4">
+          <StabilityBar
+            score={Number(session.stability_score ?? 0)}
+            matches={session.matches}
+            n={session.n_runs}
+          />
+
+          <div className="space-y-2">
+            {session.runs.map((run, i) => {
+              const matches = run.matches_original;
+              const isOpen = expanded === i;
+              return (
+                <div
+                  key={i}
+                  className={`rounded-lg border overflow-hidden ${
+                    matches ? "border-emerald-700/40 bg-emerald-950/10"
+                    : "border-rose-700/40 bg-rose-950/10"
+                  }`}
+                >
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : i)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                  >
+                    <span className={`text-sm font-bold shrink-0 ${matches ? "text-emerald-400" : "text-rose-400"}`}>
+                      {matches ? "✓" : "✗"}
+                    </span>
+                    <span className="text-xs text-slate-400 flex-1 truncate">
+                      Variant {i + 1}
+                      {run.resolution_type && (
+                        <span className="ml-2 font-mono text-slate-300">{run.resolution_type}</span>
+                      )}
+                      {run.confidence_score != null && (
+                        <span className="ml-2 text-slate-500">
+                          {Math.round(Number(run.confidence_score) * 100)}%
+                        </span>
+                      )}
+                    </span>
+                    <svg
+                      className={`w-3.5 h-3.5 text-slate-600 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      viewBox="0 0 16 16" fill="none"
+                    >
+                      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5"
+                            strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 pb-3 border-t border-slate-700/30 pt-3 space-y-2">
+                      <p className="text-xs text-slate-500 font-medium">Paraphrased message:</p>
+                      <p className="text-xs text-slate-400 leading-relaxed bg-slate-900/50
+                                    px-3 py-2 rounded-lg italic">
+                        &ldquo;{run.perturbation}&rdquo;
+                      </p>
+                      {run.replay_trace_id && (
+                        <Link
+                          href={`/runs/${run.replay_trace_id}`}
+                          className="text-xs text-blue-400 hover:underline"
+                        >
+                          View full replay trace →
+                        </Link>
+                      )}
+                      {run.error && (
+                        <p className="text-xs text-rose-400">{run.error}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            <Link href="/stability" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              View all scenarios on Stability page →
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function RunDetailPage() {
@@ -258,6 +474,18 @@ export default function RunDetailPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
 
+      {/* Replay banner */}
+      {run.is_replay && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-950/50 border
+                        border-indigo-700/40 rounded-xl text-xs text-indigo-300">
+          <span>🔁</span>
+          <span>
+            This is a <span className="font-semibold">replay trace</span> — generated from a
+            paraphrased variant of the original customer message. Not a primary investigation.
+          </span>
+        </div>
+      )}
+
       {/* Back */}
       <Link href="/issues"
             className="inline-flex items-center gap-1.5 text-xs text-slate-500
@@ -298,9 +526,9 @@ export default function RunDetailPage() {
         <PolicyFlags flags={run.policy_flags ?? []} />
       </Section>
 
-      {/* Tool trace */}
-      <Section title="Tool Call Trace">
-        <ToolTrace toolCalls={run.tool_calls ?? []} />
+      {/* Investigation workflow */}
+      <Section title="Investigation Workflow">
+        <WorkflowDiagram run={run} />
       </Section>
 
       {/* Agent reasoning */}
@@ -319,6 +547,18 @@ export default function RunDetailPage() {
       {out && Object.keys(out).some((k) => !STANDARD_FIELDS.has(k)) && (
         <Section title="Evidence Details">
           <ExtraFields out={out as Record<string, unknown>} />
+        </Section>
+      )}
+
+      {/* Critic review */}
+      <Section title="Critic Review">
+        <CriticPanel run={run} />
+      </Section>
+
+      {/* Replay engine — only for primary investigations */}
+      {!run.is_replay && (
+        <Section title="Replay & Stability">
+          <ReplayPanel traceId={run.trace_id} />
         </Section>
       )}
 

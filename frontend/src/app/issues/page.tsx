@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   listIssues, triggerInvestigation,
@@ -62,6 +62,17 @@ function IssueCard({
           <div className="flex-1 min-w-0">
             <PolicyFlags flags={issue.policy_flags ?? []} />
           </div>
+          {issue.critic_agrees !== null && issue.critic_agrees !== undefined && (
+            <div
+              title={issue.critic_agrees ? "Critic agrees with verdict" : "Critic flagged a concern"}
+              className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
+                ${issue.critic_agrees
+                  ? "bg-emerald-900/60 border border-emerald-700/50 text-emerald-400"
+                  : "bg-rose-900/60 border border-rose-700/50 text-rose-400"}`}
+            >
+              {issue.critic_agrees ? "✓" : "✗"}
+            </div>
+          )}
         </div>
       )}
 
@@ -106,7 +117,7 @@ function IssueCard({
 export default function IssuesPage() {
   const [issues, setIssues]     = useState<Issue[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [running, setRunning]   = useState<string | null>(null);
+  const [running, setRunning]   = useState<Set<string>>(new Set());
   const [error, setError]       = useState<string | null>(null);
 
   const fetchIssues = useCallback(async () => {
@@ -121,8 +132,23 @@ export default function IssuesPage() {
 
   useEffect(() => { fetchIssues(); }, [fetchIssues]);
 
+  // Poll every 5s when any issue is server-side investigating (e.g. after a page refresh)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const hasServerInProgress = issues.some((i) => i.status === "investigating" && i.run_status === null);
+    if (hasServerInProgress && !pollRef.current) {
+      pollRef.current = setInterval(fetchIssues, 5000);
+    } else if (!hasServerInProgress && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, [issues, fetchIssues]);
+
   const handleInvestigate = async (issueId: string) => {
-    setRunning(issueId);
+    setRunning((prev) => new Set(prev).add(issueId));
     setError(null);
     try {
       await triggerInvestigation(issueId);
@@ -130,7 +156,7 @@ export default function IssuesPage() {
     } catch (e) {
       setError(String(e));
     } finally {
-      setRunning(null);
+      setRunning((prev) => { const next = new Set(prev); next.delete(issueId); return next; });
     }
   };
 
@@ -181,12 +207,12 @@ export default function IssuesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          {issues.map((issue) => (
+          {issues.filter((issue, idx, arr) => arr.findIndex(i => i.issue_id === issue.issue_id) === idx).map((issue) => (
             <IssueCard
               key={issue.issue_id}
               issue={issue}
               onInvestigate={handleInvestigate}
-              loading={running === issue.issue_id}
+              loading={running.has(issue.issue_id) || issue.status === "investigating"}
             />
           ))}
         </div>

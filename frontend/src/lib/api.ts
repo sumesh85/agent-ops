@@ -19,6 +19,7 @@ export interface Issue {
   policy_flags: string[] | null;
   run_started_at: string | null;
   run_completed_at: string | null;
+  critic_agrees: boolean | null;
 }
 
 export interface ToolCall {
@@ -56,6 +57,11 @@ export interface RunTrace {
   policy_flags: string[];
   token_count: number;
   model: string;
+  is_replay: boolean;
+  // Critic review (Haiku audits Sonnet's verdict)
+  critic_agrees: boolean | null;
+  critic_notes: string | null;
+  critic_model: string | null;
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
@@ -75,6 +81,34 @@ export async function triggerInvestigation(issueId: string): Promise<RunTrace> {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail ?? `Investigation failed: ${res.status}`);
   }
+  return res.json();
+}
+
+export async function triggerReplay(
+  traceId: string,
+  n: number = 3,
+): Promise<ReplaySession> {
+  const res = await fetch(`${API_URL}/api/v1/replay/${traceId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ n }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? `Replay failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplaySession(sessionId: string): Promise<ReplaySession> {
+  const res = await fetch(`${API_URL}/api/v1/replay/sessions/${sessionId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load replay session: ${res.status}`);
+  return res.json();
+}
+
+export async function getStability(): Promise<StabilityData> {
+  const res = await fetch(`${API_URL}/api/v1/stability`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load stability: ${res.status}`);
   return res.json();
 }
 
@@ -116,6 +150,49 @@ export async function getRun(traceId: string): Promise<RunTrace> {
   return res.json();
 }
 
+export interface ReplayRun {
+  run_id: string;
+  perturbation: string;
+  resolution_type: string | null;
+  confidence_score: number | null;
+  escalate: boolean | null;
+  matches_original: boolean;
+  replay_trace_id: string | null;
+  error?: string;
+}
+
+export interface ReplaySession {
+  session_id: string;
+  trace_id: string;
+  issue_id: string;
+  n_runs: number;
+  matches: number;
+  stability_score: number | null;
+  status: string;
+  original_resolution_type?: string;
+  original_escalate?: boolean;
+  runs: ReplayRun[];
+}
+
+export interface StabilityScenario {
+  issue_id: string;
+  original_trace_id: string;
+  original_status: string;
+  original_escalate: boolean;
+  original_confidence: number | null;
+  original_resolution_type: string | null;
+  session_id: string | null;
+  n_runs: number | null;
+  matches: number | null;
+  stability_score: number | null;
+  session_status: string | null;
+}
+
+export interface StabilityData {
+  scenarios: StabilityScenario[];
+  overall_stability: number | null;
+}
+
 export interface AnalyticsSummary {
   total_runs: number;
   auto_resolved: number;
@@ -124,6 +201,8 @@ export interface AnalyticsSummary {
   avg_confidence: number | null;
   avg_duration_minutes: number | null;
   total_tokens: number | null;
+  critic_reviewed: number;
+  critic_agreed: number;
 }
 
 export interface IssueMetric {
@@ -131,6 +210,7 @@ export interface IssueMetric {
   confidence_score: number | null;
   escalate: boolean;
   status: string;
+  critic_agrees: boolean | null;
 }
 
 export interface FlagCount {
@@ -161,6 +241,7 @@ export interface EscalationRun {
   message_preview: string;
   customer_name: string;
   customer_id: string;
+  critic_agrees: boolean | null;
   // review (null if not yet reviewed)
   review_id: string | null;
   decision: "approved" | "overridden" | "rejected" | null;

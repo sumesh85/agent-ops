@@ -94,8 +94,40 @@ SUBMIT_RESOLUTION: dict[str, Any] = {
             },
             "policy_flags": {
                 "type": "array",
-                "items": {"type": "string"},
-                "description": "Policy flag codes triggered during investigation.",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        # Wire / payments
+                        "WIRE_DELAYED",           # wire outside normal processing window
+                        "WIRE_FAILED",            # wire rejected / returned
+                        "AML_HOLD",               # FINTRAC automatic AML hold triggered
+                        "ETRANSFER_FAILED",       # e-transfer failed to send or receive
+                        "ETRANSFER_REFUND_PENDING", # refund initiated, awaiting settlement
+                        # Registered accounts
+                        "RRSP_OVER_CONTRIBUTION", # customer at risk of / exceeded RRSP room
+                        "TFSA_OVER_CONTRIBUTION", # customer at risk of / exceeded TFSA room
+                        # Tax
+                        "TAX_SLIP_DISCREPANCY",   # T5 / T5008 amount does not match customer records
+                        "DRIP_TAX_ADJUSTMENT",    # DRIP shares affect reported income on T5
+                        "TAX_ADVICE_REQUIRED",    # issue requires regulated tax / CRA guidance
+                        # Security
+                        "UNAUTHORIZED_ACCESS",    # suspected account compromise or unauthorised login
+                        "UNAUTHORIZED_TRADE",     # trade customer says they did not place
+                        "FRAUD_HOLD",             # account under active fraud hold
+                        "HIGH_RISK_LOGIN",        # anomalous login signals (new country, device, etc.)
+                        # KYC / compliance
+                        "KYC_EXPIRED",            # KYC renewal overdue; account frozen or at risk
+                        "KYC_FREEZE",             # account frozen specifically for KYC non-renewal
+                        "COMPLIANCE_BLOCK",       # COMPLIANCE_BLOCK or LEGAL_HOLD on account
+                        # Investigation meta
+                        "INSUFFICIENT_DATA",      # could not gather enough evidence to resolve
+                        "MAX_TURNS_EXCEEDED",     # agent hit turn limit without resolution
+                    ],
+                },
+                "description": (
+                    "Policy flag codes triggered during this investigation. "
+                    "Select every code that applies — do not invent codes outside this list."
+                ),
             },
         },
         "required": [
