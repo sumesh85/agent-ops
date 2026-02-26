@@ -15,7 +15,7 @@ Flow:
 Design notes:
   - Agent owns NO database — it only calls MCP tools and Claude
   - submit_resolution is NOT in the MCP server; it is defined locally here
-  - Cache awareness: latency < 5 ms is used as a proxy for Redis cache hit
+  - started_at / completed_at are set by the agent and passed to the backend
   - MAX_TURNS guards against runaway loops
 """
 
@@ -278,14 +278,10 @@ async def run_investigation(
                         except json.JSONDecodeError:
                             parsed = {"raw": raw_text}
 
-                        # Use latency as a proxy for cache hit (< 5 ms = Redis hit)
-                        cache_hit = latency_ms < 5.0
-
                         tool_call_logs.append({
                             "tool": tool_name,
                             "args_digest": _digest(tool_args),
                             "latency_ms": round(latency_ms, 2),
-                            "cache_hit": cache_hit,
                             "result_summary": _summarise(tool_name, parsed),
                         })
 
@@ -293,7 +289,6 @@ async def run_investigation(
                             "runner.tool_called",
                             tool=tool_name,
                             latency_ms=round(latency_ms, 1),
-                            cache_hit=cache_hit,
                         )
 
                         tool_results.append({
@@ -310,11 +305,14 @@ async def run_investigation(
 
     except Exception as exc:
         log.exception("runner.error", trace_id=trace_id, error=str(exc))
-        duration_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+        completed_at = datetime.now(UTC)
+        duration_ms = (completed_at - started_at).total_seconds() * 1000
         return {
             "trace_id": trace_id,
             "issue_id": issue_id,
             "customer_id": customer_id,
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
             "status": "failed",
             "tool_calls": tool_call_logs,
             "structured_output": {},
@@ -343,7 +341,8 @@ async def run_investigation(
             "policy_flags": ["MAX_TURNS_EXCEEDED"],
         }
 
-    duration_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+    completed_at = datetime.now(UTC)
+    duration_ms = (completed_at - started_at).total_seconds() * 1000
     escalate: bool = structured_output.get("escalate", False)
     turns_taken = len([m for m in messages if m["role"] == "assistant"])
 
@@ -362,6 +361,8 @@ async def run_investigation(
         "trace_id": trace_id,
         "issue_id": issue_id,
         "customer_id": customer_id,
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
         "status": "escalated" if escalate else "completed",
         "tool_calls": tool_call_logs,
         "structured_output": structured_output,

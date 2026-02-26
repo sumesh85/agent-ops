@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS run_traces (
     status            TEXT          NOT NULL DEFAULT 'running',
     -- running|completed|escalated|failed
     tool_calls        JSONB         NOT NULL DEFAULT '[]',
-    -- [{tool, args_digest, latency_ms, cache_hit, result_summary}]
+    -- [{tool, args_digest, latency_ms, result_summary}]
     agent_reasoning   TEXT,
     structured_output JSONB,
     confidence_score  NUMERIC(4,3),

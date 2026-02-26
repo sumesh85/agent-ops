@@ -287,8 +287,7 @@ export default function RunDetailPage() {
       {/* Stat row */}
       <div className="grid grid-cols-4 gap-3">
         <Stat label="Duration"   value={dur} />
-        <Stat label="Tool calls" value={run.tool_calls?.length ?? 0}
-              sub={`${run.tool_calls?.filter(t => t.cache_hit).length ?? 0} cached`} />
+        <Stat label="Tool calls" value={run.tool_calls?.length ?? 0} />
         <Stat label="Tokens"     value={run.token_count?.toLocaleString()} sub={run.model} />
         <Stat label="Escalated"  value={run.escalate ? "Yes ⚠" : "No ✓"}
               sub={out?.escalation_priority} />

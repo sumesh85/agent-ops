@@ -40,7 +40,6 @@ export default function ToolTrace({ toolCalls }: Props) {
     return <p className="text-sm text-slate-500 italic">No tool calls recorded.</p>;
   }
 
-  const cached = toolCalls.filter((t) => t.cache_hit).length;
   const totalMs = toolCalls.reduce((s, t) => s + t.latency_ms, 0);
 
   return (
@@ -48,8 +47,6 @@ export default function ToolTrace({ toolCalls }: Props) {
       {/* Summary bar */}
       <div className="flex items-center gap-4 mb-4 text-xs text-slate-500">
         <span>{toolCalls.length} calls</span>
-        <span className="text-slate-700">•</span>
-        <span>{cached} cached</span>
         <span className="text-slate-700">•</span>
         <span>{totalMs.toFixed(0)}ms total</span>
       </div>
@@ -84,14 +81,8 @@ export default function ToolTrace({ toolCalls }: Props) {
                 {tc.result_summary}
               </span>
 
-              {/* Latency + cache */}
-              <div className="flex items-center gap-2">
-                {tc.cache_hit ? (
-                  <span className="text-xs text-emerald-500 font-mono">●&nbsp;cache</span>
-                ) : (
-                  <LatencyBar ms={tc.latency_ms} />
-                )}
-              </div>
+              {/* Latency */}
+              <LatencyBar ms={tc.latency_ms} />
             </div>
           );
         })}

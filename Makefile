@@ -55,10 +55,17 @@ migrate: ## Apply SQL migrations in order (idempotent — safe to re-run)
 seed: ## Seed PostgreSQL + ChromaDB with synthetic demo data
 	$(COMPOSE) run --rm seed
 
-.PHONY: dev
-dev: up ## Full dev start: services up + migrate + seed data loaded
+.PHONY: wait-healthy
+wait-healthy: ## Poll backend /health until all services are ready (120s timeout)
 	@echo "Waiting for services to be healthy..."
-	@sleep 12
+	@for i in $$(seq 1 60); do \
+		curl -sf http://localhost:8000/health > /dev/null 2>&1 && echo "✓ All services healthy." && exit 0; \
+		printf "."; sleep 2; \
+	done; \
+	echo ""; echo "ERROR: Timed out after 120s waiting for backend health check." ; exit 1
+
+.PHONY: dev
+dev: up wait-healthy ## Full dev start: services up + migrate + seed data loaded
 	$(MAKE) migrate
 	$(MAKE) seed
 

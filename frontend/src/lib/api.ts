@@ -25,7 +25,6 @@ export interface ToolCall {
   tool: string;
   args_digest: string;
   latency_ms: number;
-  cache_hit: boolean;
   result_summary: string;
 }
 

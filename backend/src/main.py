@@ -1,7 +1,7 @@
 """AgentOps Control Plane — backend API."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 import structlog
@@ -13,7 +13,6 @@ from src.config import settings
 from src.db.pool import close_pool, get_pool
 
 log = structlog.get_logger()
-UTC = timezone.utc
 
 app = FastAPI(
     title="AgentOps Control Plane",
@@ -78,8 +77,12 @@ async def investigate(issue_id: str) -> dict:  # type: ignore[type-arg]
         log.error("backend.agent_unreachable", issue_id=issue_id, error=str(exc))
         raise HTTPException(status_code=503, detail="Agent service unreachable.")
 
-    # Persist run trace
-    await _persist_trace(result)
+    # Persist run trace — raises 500 if storage fails so the client knows
+    try:
+        await _persist_trace(result)
+    except Exception as exc:
+        log.error("backend.persist_failed", issue_id=issue_id, error=str(exc))
+        raise HTTPException(status_code=500, detail="Investigation completed but trace could not be saved.")
 
     return result
 
@@ -311,36 +314,33 @@ async def review_escalation(trace_id: str, body: ReviewRequest) -> dict:  # type
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _persist_trace(result: dict) -> None:  # type: ignore[type-arg]
-    """Write a RunResult dict to run_traces. Non-fatal on error."""
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO run_traces (
-                    trace_id, issue_id, started_at, completed_at, status,
-                    tool_calls, agent_reasoning, structured_output,
-                    confidence_score, escalate, policy_flags,
-                    token_count, model
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-                ON CONFLICT (trace_id) DO NOTHING
-                """,
-                result["trace_id"],
-                result["issue_id"],
-                datetime.now(UTC),          # started_at approximation from backend side
-                datetime.now(UTC),
-                result["status"],
-                json.dumps(result.get("tool_calls", [])),
-                (result.get("agent_reasoning") or "")[:10_000],
-                json.dumps(result.get("structured_output", {}), default=str),
-                float(result.get("confidence_score", 0.0)),
-                bool(result.get("escalate", False)),
-                json.dumps(result.get("policy_flags", [])),
-                int(result.get("token_count", 0)),
-                settings.anthropic_model,
-            )
-    except Exception as exc:
-        log.error("backend.persist_failed", error=str(exc))
+    """Write a RunResult dict to run_traces. Raises on error — callers must handle."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO run_traces (
+                trace_id, issue_id, started_at, completed_at, status,
+                tool_calls, agent_reasoning, structured_output,
+                confidence_score, escalate, policy_flags,
+                token_count, model
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            ON CONFLICT (trace_id) DO NOTHING
+            """,
+            result["trace_id"],
+            result["issue_id"],
+            datetime.fromisoformat(result["started_at"]),
+            datetime.fromisoformat(result["completed_at"]),
+            result["status"],
+            json.dumps(result.get("tool_calls", [])),
+            (result.get("agent_reasoning") or "")[:10_000],
+            json.dumps(result.get("structured_output", {}), default=str),
+            float(result.get("confidence_score", 0.0)),
+            bool(result.get("escalate", False)),
+            json.dumps(result.get("policy_flags", [])),
+            int(result.get("token_count", 0)),
+            settings.anthropic_model,
+        )
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
