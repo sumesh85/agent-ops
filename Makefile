@@ -43,14 +43,23 @@ restart-agent: ## Restart agent only
 	$(COMPOSE) restart agent
 
 # ── Data ─────────────────────────────────────────────────────────────────────────
+.PHONY: migrate
+migrate: ## Apply SQL migrations in order (idempotent — safe to re-run)
+	@for f in backend/src/db/migrations/*.sql; do \
+		echo "Applying $$f..."; \
+		$(COMPOSE) exec -T db psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f - < $$f; \
+	done
+	@echo -e "$(CYAN)✓ Migrations applied.$(RESET)"
+
 .PHONY: seed
 seed: ## Seed PostgreSQL + ChromaDB with synthetic demo data
 	$(COMPOSE) run --rm seed
 
 .PHONY: dev
-dev: up ## Full dev start: services up + seed data loaded
+dev: up ## Full dev start: services up + migrate + seed data loaded
 	@echo "Waiting for services to be healthy..."
 	@sleep 12
+	$(MAKE) migrate
 	$(MAKE) seed
 
 # ── Logs ─────────────────────────────────────────────────────────────────────────

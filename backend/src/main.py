@@ -2,7 +2,6 @@
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import httpx
 import structlog
@@ -348,12 +347,6 @@ async def _persist_trace(result: dict) -> None:  # type: ignore[type-arg]
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    # Apply pending migrations (idempotent DDL)
-    pool = await get_pool()
-    migration = Path(__file__).parent / "db" / "migrations" / "002_escalations.sql"
-    if migration.exists():
-        async with pool.acquire() as conn:
-            await conn.execute(migration.read_text())
     log.info("agentops.startup", env=settings.app_env, agent_url=settings.agent_url)
 
 
